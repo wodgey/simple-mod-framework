@@ -1,0 +1,68 @@
+name: Check Hitman 3 MD5
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-hash:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET Runtime
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Download DepotDownloader
+        run: |
+          mkdir -p depotdownloader_cli
+          curl -sL https://github.com/SteamRE/DepotDownloader/releases/latest/download/DepotDownloader-linux-x64.zip -o depotdownloader.zip
+          unzip -o depotdownloader.zip -d depotdownloader_cli
+          chmod +x depotdownloader_cli/DepotDownloader
+
+      - name: Download HITMAN3.exe
+        run: |
+          ./depotdownloader_cli/DepotDownloader \
+            -app 1847520 \
+            -depot 1659041 \
+            -filelist <(echo "Retail/HITMAN3.exe") \
+            -dir ./game_files \
+            -username "${{ secrets.STEAM_USER }}" \
+            -password "${{ secrets.STEAM_PASSWORD }}"
+
+      - name: Compute and Save MD5
+        run: |
+          EXE_PATH=$(find ./game_files -name "HITMAN3.exe" -print -quit)
+          if [ -z "$EXE_PATH" ]; then
+            echo "Error: HITMAN3.exe not found!"
+            exit 1
+          fi
+          NEW_HASH=$(md5sum "$EXE_PATH" | awk '{print $1}')
+          
+          if [ -f "hitman-hash.txt" ]; then
+            OLD_HASH=$(cat hitman-hash.txt)
+          else
+            OLD_HASH=""
+          fi
+
+          if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+            echo "$NEW_HASH" > hitman-hash.txt
+            echo "Hash changed! Saving new hash."
+          else
+            echo "Hash unchanged."
+          fi
+
+      - name: Commit Hash File if Changed
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add hitman-hash.txt
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Hitman 3 updated! New MD5 hash detected" && git push)
