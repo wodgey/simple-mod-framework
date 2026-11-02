@@ -69,3 +69,12 @@ Upstream's "update for game version X" commit refreshes all of these. Once it ex
 - `ResourceTool.exe` was left alone for 3.290.0 (same size as the copy SMF ships). If a game update needs it, copy it from the ZHMTools `ResourceTool-win-x64.zip` into `For Build/Third-Party`.
 - `hash_list.hmla` comes from the repo and is stale until upstream updates it. SMF's own code does not read it; if ResourceTool complains about unknown hashes, this is the first suspect.
 - Do not enable Actions on the fork: upstream's `release.yml` hard-codes `atampy25/simple-mod-framework` as the release target and would fail on tag pushes.
+
+## Automation (GitHub Actions)
+
+Two workflows do the routine work:
+
+- `check-hash.yml` ("Check Hitman 3 MD5", daily): downloads `Retail/HITMAN3.exe` from the Steam depot with DepotDownloader, and commits its MD5 to `hitman-hash.txt` when it changed.
+- `fork-build.yml`: builds upstream `main` plus this fork's overlay (the MD5 from `hitman-hash.txt`, newer ZHMTools ResourceLib DLLs if upstream has not updated them, a fresh hash list) and publishes an `auto-*` release when anything changed. It runs after every `check-hash` run (`workflow_run`; commits made with the default token do not trigger `push` workflows), every 6 hours, and on pushes to `fork-tools/` or `hitman-hash.txt`. The last 5 are kept. The fork's own `src/` is not used, so no merging is needed.
+
+CI cannot deploy-test, so test an auto release before relying on it. Upstream's own workflows are disabled in the fork on purpose (their Release workflow targets atampy25's repo). If the scheduled runs stop after 60 days without commits, re-enable them in the Actions tab. If `check-hash` starts failing, check the `STEAM_USER` / `STEAM_PASSWORD` secrets and whether Steam is asking the account for a login confirmation.

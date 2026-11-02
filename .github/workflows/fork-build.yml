@@ -1,0 +1,169 @@
+name: Fork build
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'fork-tools/**'
+      - 'hitman-hash.txt'
+      - '.github/workflows/fork-build.yml'
+  workflow_run:
+    workflows: ['Check Hitman 3 MD5']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild even if a release for this combination already exists'
+        type: boolean
+        default: false
+
+concurrency:
+  group: fork-build
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.k.outputs.build }}
+      tag: ${{ steps.k.outputs.tag }}
+      up_sha: ${{ steps.k.outputs.up_sha }}
+      up_tag: ${{ steps.k.outputs.up_tag }}
+      zhm_tag: ${{ steps.k.outputs.zhm_tag }}
+      zhm_overlay: ${{ steps.k.outputs.zhm_overlay }}
+      hh_tag: ${{ steps.k.outputs.hh_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: fork
+      - uses: actions/checkout@v4
+        with:
+          repository: atampy25/simple-mod-framework
+          path: up
+          fetch-depth: 0
+      - id: k
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          UP_SHA=$(git -C up rev-parse HEAD)
+          UP_TAG=$(git -C up describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*')
+          ZHM_TAG=$(gh api repos/OrfeasZ/ZHMTools/releases/latest --jq .tag_name)
+          ZHM_DATE=$(gh api repos/OrfeasZ/ZHMTools/releases/latest --jq .published_at)
+          HH_TAG=$(gh api repos/glacier-modding/hitman-hashes/releases/latest --jq .tag_name)
+
+          # Overlay ZHMTools DLLs only if that release is newer than the DLLs upstream last committed.
+          DLL_CT=$(git -C up log -1 --format=%ct -- "For Build/Third-Party/ResourceLib_HM3.dll")
+          ZHM_CT=$(date -d "$ZHM_DATE" +%s)
+          OVERLAY=false
+          if [ "$ZHM_CT" -gt "$DLL_CT" ]; then OVERLAY=true; fi
+          if [ "$OVERLAY" = true ]; then ZHM_PART="$ZHM_TAG"; else ZHM_PART="upstream"; fi
+
+          MD5_KEY=$({ cat fork/hitman-hash.txt 2>/dev/null || true; } | sha256sum | cut -c1-7)
+          KEY="${UP_TAG}-${UP_SHA:0:7}-zhm${ZHM_PART}-hh${HH_TAG}-m${MD5_KEY}"
+          TAG="auto-$(printf '%s' "$KEY" | tr -c 'A-Za-z0-9._-' '-')"
+
+          BUILD=true
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && [ "${FORCE:-}" != "true" ]; then
+            BUILD=false
+          fi
+          echo "tag=$TAG  build=$BUILD  overlay=$OVERLAY"
+          {
+            echo "build=$BUILD"
+            echo "tag=$TAG"
+            echo "up_sha=$UP_SHA"
+            echo "up_tag=$UP_TAG"
+            echo "zhm_tag=$ZHM_TAG"
+            echo "zhm_overlay=$OVERLAY"
+            echo "hh_tag=$HH_TAG"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: fork
+      - uses: actions/checkout@v4
+        with:
+          repository: atampy25/simple-mod-framework
+          ref: ${{ needs.check.outputs.up_sha }}
+          path: up
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Toolchain
+        shell: pwsh
+        run: |
+          rustup update stable
+          rustup default stable
+          npm install -g typescript@5.6 pkg
+          rustc -V
+          tsc -v
+      - name: Add Steam MD5
+        run: |
+          set -euo pipefail
+          (grep -oE '^[0-9a-f]{32}' fork/hitman-hash.txt 2>/dev/null || true) | while read -r h; do
+            MD5="$h" SMF_ROOT="$PWD/up" bash fork/fork-tools/update-game-hash.sh
+          done
+      - name: Overlay ZHMTools ResourceLib
+        if: needs.check.outputs.zhm_overlay == 'true'
+        run: |
+          set -euo pipefail
+          T="${{ needs.check.outputs.zhm_tag }}"
+          curl -fsSL -o rl.zip "https://github.com/OrfeasZ/ZHMTools/releases/download/$T/ResourceLib-win-x64.zip"
+          7z x rl.zip -orl -y > /dev/null
+          for f in ResourceLib_HM2 ResourceLib_HM2016 ResourceLib_HM3 ResourceLib_KNT; do
+            [ -f "rl/$f.dll" ] || { echo "missing $f.dll in $T"; exit 1; }
+            cp -f "rl/$f.dll" "up/For Build/Third-Party/$f.dll"
+          done
+      - name: Build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force up/fork-tools | Out-Null
+          Copy-Item fork/fork-tools/build.ps1 up/fork-tools/build.ps1
+          & ./up/fork-tools/build.ps1
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+          UP_SHA: ${{ needs.check.outputs.up_sha }}
+          UP_TAG: ${{ needs.check.outputs.up_tag }}
+          ZHM_TAG: ${{ needs.check.outputs.zhm_tag }}
+          ZHM_OVERLAY: ${{ needs.check.outputs.zhm_overlay }}
+          HH_TAG: ${{ needs.check.outputs.hh_tag }}
+        run: |
+          set -euo pipefail
+          cp up/Release.zip "SMF-$TAG.zip"
+          {
+            echo "Automated build of [atampy25/simple-mod-framework](https://github.com/atampy25/simple-mod-framework/commit/$UP_SHA) $UP_TAG. **Not deploy-tested** (CI has no game)."
+            echo
+            echo "- Steam HITMAN3.exe MD5 read from the Steam depot by the 'Check Hitman 3 MD5' workflow (hitman-hash.txt) and added to the game hash table. Steam only; Epic and Microsoft Store need upstream."
+            if [ "$ZHM_OVERLAY" = "true" ]; then
+              echo "- ResourceLib DLLs overlaid from [OrfeasZ/ZHMTools $ZHM_TAG](https://github.com/OrfeasZ/ZHMTools/releases/tag/$ZHM_TAG)."
+            else
+              echo "- ResourceLib DLLs as shipped by upstream."
+            fi
+            echo "- Hash list from glacier-modding/hitman-hashes release $HH_TAG."
+            echo "- cleanPackageDefinition.txt is omitted and regenerates on first deploy. Verify game files in Steam first."
+            echo
+            echo "When upgrading, do not overwrite config.json or Mods. Update guide: fork-tools/UPDATING.md"
+          } > notes.md
+          gh release delete "$TAG" -R "$GITHUB_REPOSITORY" --cleanup-tag -y 2>/dev/null || true
+          gh release create "$TAG" "SMF-$TAG.zip" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "SMF $UP_TAG (auto, $TAG)" --notes-file notes.md
+          # keep only the 5 newest auto releases
+          gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("auto-"))] | sort_by(.createdAt) | reverse | .[5:] | .[].tagName' \
+            | while read -r t; do gh release delete "$t" -R "$GITHUB_REPOSITORY" --cleanup-tag -y; done
