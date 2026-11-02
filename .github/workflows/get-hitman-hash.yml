@@ -21,10 +21,11 @@ jobs:
       - name: Download and Extract DepotDownloader
         run: |
           mkdir -p depotdownloader_cli
-          curl -sL https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_2.7.4/DepotDownloader-xml-x64.zip -o depotdownloader.zip
+          curl -sL https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-linux-x64.zip -o depotdownloader.zip
           unzip -o depotdownloader.zip -d depotdownloader_cli
           chmod +x depotdownloader_cli/DepotDownloader
-          *Verification:* Running `ls depotdownloader_cli/DepotDownloader` confirms the binary extracted properly.
+          ls -la depotdownloader_cli/
+          # Verification: Confirm the DepotDownloader executable file exists and has execution permissions.
 
       - name: Download HITMAN3.exe via Demo Depot
         run: |
@@ -35,7 +36,7 @@ jobs:
             -dir ./game_files \
             -username "${{ secrets.STEAM_USER }}" \
             -password "${{ secrets.STEAM_PASSWORD }}"
-          *Verification:* Check that DepotDownloader logs into Steam and starts downloading the target file.
+          # Verification: Check that DepotDownloader successfully logs into Steam and retrieves the file.
 
       - name: Calculate and Print MD5
         run: |
@@ -49,4 +50,4 @@ jobs:
           MD5_HASH=$(md5sum "$EXE_PATH" | awk '{print $1}')
           echo "CURRENT_HITMAN_MD5=$MD5_HASH"
           echo "The current MD5 hash of HITMAN3.exe is: $MD5_HASH"
-          *Verification:* The MD5 string prints out successfully in the console logs.
+          # Verification: The unique MD5 checksum string prints cleanly in the job logs.
