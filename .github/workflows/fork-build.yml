@@ -109,6 +109,8 @@ jobs:
         run: |
           rustup update stable
           rustup default stable
+          corepack enable
+          yarn --cwd up/rust --version
           npm install -g typescript@5.6 pkg
           rustc -V
           tsc -v
