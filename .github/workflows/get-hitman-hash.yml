@@ -24,7 +24,6 @@ jobs:
           curl -sL https://github.com/SteamRE/DepotDownloader/releases/latest/download/DepotDownloader-linux-x64.zip -o depotdownloader.zip
           unzip -o depotdownloader.zip -d depotdownloader_cli
           chmod +x depotdownloader_cli/DepotDownloader
-          # Verification: Confirm the binary is extracted and executable
           ls -la depotdownloader_cli/
 
       - name: Download HITMAN3.exe via Demo Depot
@@ -32,11 +31,10 @@ jobs:
           ./depotdownloader_cli/DepotDownloader \
             -app 1847520 \
             -depot 1659041 \
-            -file "Retail/HITMAN3.exe" \
+            -filelist <(echo "Retail/HITMAN3.exe") \
             -dir ./game_files \
             -username "${{ secrets.STEAM_USER }}" \
             -password "${{ secrets.STEAM_PASSWORD }}"
-          # Verification: Check that DepotDownloader successfully authenticates and downloads the file.
 
       - name: Calculate and Print MD5
         run: |
@@ -50,4 +48,3 @@ jobs:
           MD5_HASH=$(md5sum "$EXE_PATH" | awk '{print $1}')
           echo "CURRENT_HITMAN_MD5=$MD5_HASH"
           echo "The current MD5 hash of HITMAN3.exe is: $MD5_HASH"
-          # Verification: The MD5 checksum prints out successfully in the logs.
