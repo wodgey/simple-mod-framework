@@ -1,0 +1,41 @@
+name: Probe packagedefinition
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Download DepotDownloader
+        run: |
+          mkdir -p dd
+          curl -sL https://github.com/SteamRE/DepotDownloader/releases/latest/download/DepotDownloader-linux-x64.zip -o dd.zip
+          unzip -o dd.zip -d dd
+          chmod +x dd/DepotDownloader
+      - name: Download Runtime/packagedefinition.txt from the demo depot
+        run: |
+          ./dd/DepotDownloader \
+            -app 1847520 \
+            -depot 1659041 \
+            -filelist <(printf 'Runtime/packagedefinition.txt\n') \
+            -dir ./game_files \
+            -username "${{ secrets.STEAM_USER }}" \
+            -password "${{ secrets.STEAM_PASSWORD }}" || true
+          echo "--- files downloaded:"
+          find ./game_files -type f | head -20
+      - name: Compare with Atampy25's current clean copy
+        run: |
+          set -uo pipefail
+          D=$(find ./game_files -iname 'packagedefinition.txt' -print -quit)
+          curl -fsSL -o atampy.txt 'https://raw.githubusercontent.com/atampy25/simple-mod-framework/main/For%20Build/cleanPackageDefinition.txt'
+          echo "atampy25 main: $(stat -c %s atampy.txt) bytes, sha256 $(sha256sum atampy.txt | cut -c1-16)"
+          if [ -z "$D" ]; then echo "RESULT: not in the demo depot at that path"; exit 0; fi
+          echo "demo depot:    $(stat -c %s "$D") bytes, sha256 $(sha256sum "$D" | cut -c1-16)"
+          if cmp -s "$D" atampy.txt; then echo "RESULT: IDENTICAL"; else echo "RESULT: DIFFERENT"; fi
