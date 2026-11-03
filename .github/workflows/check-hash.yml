@@ -33,7 +33,7 @@ jobs:
           ./depotdownloader_cli/DepotDownloader \
             -app 1847520 \
             -depot 1659041 \
-            -filelist <(echo "Retail/HITMAN3.exe") \
+            -filelist <(printf 'Retail/HITMAN3.exe\nRuntime/packagedefinition.txt\n') \
             -dir ./game_files \
             -username "${{ secrets.STEAM_USER }}" \
             -password "${{ secrets.STEAM_PASSWORD }}"
@@ -60,9 +60,20 @@ jobs:
             echo "Hash unchanged."
           fi
 
+          PD_PATH=$(find ./game_files -iname "packagedefinition.txt" -print -quit)
+          if [ -z "$PD_PATH" ]; then
+            echo "Warning: packagedefinition.txt not found in the download (MD5 handling is unaffected)."
+          elif cmp -s "$PD_PATH" hitman-packagedefinition.txt 2>/dev/null; then
+            echo "Package definition unchanged."
+          else
+            cp "$PD_PATH" hitman-packagedefinition.txt
+            echo "Package definition changed! Saving new copy."
+          fi
+
       - name: Commit Hash File if Changed
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add hitman-hash.txt
+          if [ -f hitman-packagedefinition.txt ]; then git add hitman-packagedefinition.txt; fi
           git diff --quiet && git diff --staged --quiet || (git commit -m "Hitman 3 updated! New MD5 hash detected" && git push)

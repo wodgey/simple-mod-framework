@@ -59,7 +59,7 @@ Set-Content -Path "dist\Mod Manager.cmd" -Value "@echo off`ncd `"Mod Manager`"`n
 
 # The shipped copy matches whatever game version upstream last built for. Drop it so SMF regenerates it
 # from the installed game's Runtime\packagedefinition.txt (verify game files in Steam first).
-Remove-Item "dist\cleanPackageDefinition.txt" -Force -ErrorAction SilentlyContinue
+if (-not $env:SMF_KEEP_CLEAN_PACKAGEDEF) { Remove-Item "dist\cleanPackageDefinition.txt" -Force -ErrorAction SilentlyContinue }
 
 # Extract last so the fresh hash list wins over anything shipped in the repo.
 Run "download latest hashes" { Invoke-WebRequest "https://github.com/glacier-modding/hitman-hashes/releases/latest/download/latest-hashes.7z" -OutFile latest-hashes.7z }
