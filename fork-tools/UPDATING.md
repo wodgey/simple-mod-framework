@@ -45,7 +45,7 @@ Upstream's "update for game version X" commit refreshes all of these. Once it ex
    ```
    & { powershell -ExecutionPolicy Bypass -File C:\dev\simple-mod-framework\fork-tools\build.ps1 }
    ```
-   Output: `dist\` and `Release.zip`. The build drops the shipped `cleanPackageDefinition.txt` and extracts `latest-hashes.7z` last, so the fresh `hash_list.txt` wins.
+   Output: `dist\` and `Release.zip`. The build drops the shipped `cleanPackageDefinition.txt` and extracts `latest-hashes.7z` last, so the fresh `hash_list.txt` wins. It then downloads `hash_list.hmla` from the latest [Hitman-l10n-Hashes](https://github.com/glacier-modding/Hitman-l10n-Hashes/releases) release.
 6. **Install over the existing SMF folder** (keeps your caches):
    - Back up first: `Deploy.exe`, `Mod Manager.cmd`, `Mod Manager`, `Third-Party`, `Info`, `API`, `cleanPackageDefinition.txt` **and `config.json`**.
    - Copy from `dist` into the SMF folder, overwriting: `Deploy.exe`, `Mod Manager.cmd`, `Mod Manager`, `Third-Party`, `Info`, `API`.
@@ -67,7 +67,7 @@ Upstream's "update for game version X" commit refreshes all of these. Once it ex
 
 - `update-game-hash.sh` only handles the Steam base-game exe. Ansel-unlocked, Epic and Microsoft Store hashes are not added.
 - `ResourceTool.exe` was left alone for 3.290.0 (same size as the copy SMF ships). If a game update needs it, copy it from the ZHMTools `ResourceTool-win-x64.zip` into `For Build/Third-Party`.
-- `hash_list.hmla` comes from the repo and is stale until upstream updates it. SMF's own code does not read it; if ResourceTool complains about unknown hashes, this is the first suspect.
+- `hash_list.hmla` is downloaded fresh from glacier-modding/Hitman-l10n-Hashes by `build.ps1` (HMLanguageTools needs it next to the exe for LOCR/DLGE hash resolution; only non-English text paths would show a problem). The copy committed in `For Build/Third-Party` is overwritten.
 - Do not enable Actions on the fork: upstream's `release.yml` hard-codes `atampy25/simple-mod-framework` as the release target and would fail on tag pushes.
 
 ## Automation (GitHub Actions)
@@ -75,6 +75,6 @@ Upstream's "update for game version X" commit refreshes all of these. Once it ex
 This repository is built **only from its own source**. Nothing is fetched from Atampy25's repository at build time, so the fork stays buildable even if that repository disappears. His changes arrive only when merged on purpose (step 2 above, then `git push origin main --tags`).
 
 - `check-hash.yml` ("Check Hitman 3 MD5", daily): downloads `Retail/HITMAN3.exe` and `Runtime/packagedefinition.txt` from the Steam depot with DepotDownloader (the free demo depot is a full copy of the retail game), and commits `hitman-hash.txt` (exe MD5) and `hitman-packagedefinition.txt` (vanilla package definition, verified byte-identical to Atampy25's copy on 2026-11-03) when either changes.
-- `fork-build.yml`: runs after every `check-hash` run (`workflow_run`; commits made with the default token do not trigger `push` workflows) and on pushes. It builds and publishes an `auto-*` release only when an input changed: this repo's source, a new ZHMTools release (ResourceLib DLLs and ResourceTool.exe are always overlaid from the latest release), a new hitman-hashes release, or a new MD5 / package definition. The last 5 releases are kept.
+- `fork-build.yml`: runs after every `check-hash` run (`workflow_run`; commits made with the default token do not trigger `push` workflows) and on pushes. It builds and publishes an `auto-*` release only when an input changed: this repo's source, a new ZHMTools release (ResourceLib DLLs and ResourceTool.exe are always overlaid from the latest release), a new hitman-hashes or Hitman-l10n-Hashes release, or a new MD5 / package definition. The last 5 releases are kept.
 
-Frozen at the last upstream merge: the Epic, Ansel and Microsoft hashes, `FrameworkVersion`, `cleanThumbs.dat` and `hash_list.hmla`. Candidate for the same depot treatment: `Retail/thumbs.dat` (probe first). CI cannot deploy-test, so test an auto release before relying on it. Upstream's own workflows are disabled in the fork on purpose. If the scheduled `check-hash` stops after 60 days without commits, re-enable it in the Actions tab. If `check-hash` fails, check the `STEAM_USER` / `STEAM_PASSWORD` secrets and whether Steam asks the account for a login confirmation.
+Frozen at the last upstream merge: the Epic, Ansel and Microsoft hashes, `FrameworkVersion`, and `cleanThumbs.dat`. Candidate for the same depot treatment: `Retail/thumbs.dat` (probe first). CI cannot deploy-test, so test an auto release before relying on it. Upstream's own workflows are disabled in the fork on purpose. If the scheduled `check-hash` stops after 60 days without commits, re-enable it in the Actions tab. If `check-hash` fails, check the `STEAM_USER` / `STEAM_PASSWORD` secrets and whether Steam asks the account for a login confirmation.

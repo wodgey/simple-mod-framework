@@ -30,6 +30,7 @@ jobs:
       base_tag: ${{ steps.k.outputs.base_tag }}
       zhm_tag: ${{ steps.k.outputs.zhm_tag }}
       hh_tag: ${{ steps.k.outputs.hh_tag }}
+      l10n_tag: ${{ steps.k.outputs.l10n_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,8 +47,9 @@ jobs:
           SRC_KEY=$(git -C fork ls-tree HEAD -- src rust "Mod Manager" "For Build" Third-Party piscina docs package.json package-lock.json tsconfig.json fork-tools/build.ps1 fork-tools/update-game-hash.sh | sha256sum | cut -c1-7)
           ZHM_TAG=$(gh api repos/OrfeasZ/ZHMTools/releases/latest --jq .tag_name)
           HH_TAG=$(gh api repos/glacier-modding/hitman-hashes/releases/latest --jq .tag_name)
+          L10N_TAG=$(gh api repos/glacier-modding/Hitman-l10n-Hashes/releases/latest --jq .tag_name)
           MD5_KEY=$({ cat fork/hitman-hash.txt fork/hitman-packagedefinition.txt 2>/dev/null || true; } | sha256sum | cut -c1-7)
-          KEY="${BASE_TAG}-${SRC_KEY}-zhm${ZHM_TAG}-hh${HH_TAG}-m${MD5_KEY}"
+          KEY="${BASE_TAG}-${SRC_KEY}-zhm${ZHM_TAG}-hh${HH_TAG}-l${L10N_TAG}-m${MD5_KEY}"
           TAG="auto-$(printf '%s' "$KEY" | tr -c 'A-Za-z0-9._-' '-')"
 
           BUILD=true
@@ -61,6 +63,7 @@ jobs:
             echo "base_tag=$BASE_TAG"
             echo "zhm_tag=$ZHM_TAG"
             echo "hh_tag=$HH_TAG"
+            echo "l10n_tag=$L10N_TAG"
           } >> "$GITHUB_OUTPUT"
 
   build:
@@ -129,6 +132,7 @@ jobs:
           BASE_TAG: ${{ needs.check.outputs.base_tag }}
           ZHM_TAG: ${{ needs.check.outputs.zhm_tag }}
           HH_TAG: ${{ needs.check.outputs.hh_tag }}
+          L10N_TAG: ${{ needs.check.outputs.l10n_tag }}
         run: |
           set -euo pipefail
           cp fork/Release.zip "SMF-$TAG.zip"
@@ -137,7 +141,7 @@ jobs:
             echo
             echo "- Steam HITMAN3.exe MD5 read from the Steam depot by the 'Check Hitman 3 MD5' workflow (hitman-hash.txt) and added to the game hash table. Steam only; the other platforms' hashes are as of the last sync."
             echo "- ResourceLib DLLs and ResourceTool.exe from [OrfeasZ/ZHMTools $ZHM_TAG](https://github.com/OrfeasZ/ZHMTools/releases/tag/$ZHM_TAG)."
-            echo "- Hash list from glacier-modding/hitman-hashes release $HH_TAG."
+            echo "- Hash list from glacier-modding/hitman-hashes release $HH_TAG; hash_list.hmla (localisation hashes) from [glacier-modding/Hitman-l10n-Hashes $L10N_TAG](https://github.com/glacier-modding/Hitman-l10n-Hashes/releases/tag/$L10N_TAG)."
             if [ -s fork/hitman-packagedefinition.txt ]; then
               echo "- cleanPackageDefinition.txt is the vanilla copy read from the Steam depot (same game version as the MD5 above)."
             else

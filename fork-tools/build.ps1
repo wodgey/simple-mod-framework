@@ -66,6 +66,10 @@ Run "download latest hashes" { Invoke-WebRequest "https://github.com/glacier-mod
 Run "extract latest hashes" { 7z x latest-hashes.7z -o".\dist\Third-Party" -y }
 Remove-Item latest-hashes.7z -Force
 
+# hash_list.hmla (needed by HMLanguageTools for LOCR/DLGE hash resolution) is published separately by glacier-modding.
+Run "download hash_list.hmla" { Invoke-WebRequest "https://github.com/glacier-modding/Hitman-l10n-Hashes/releases/latest/download/hash_list.hmla" -OutFile ".\dist\Third-Party\hash_list.hmla" }
+if ((Get-Item ".\dist\Third-Party\hash_list.hmla").Length -lt 100000) { throw "hash_list.hmla download looks wrong (too small)" }
+
 Run "zip" {
 	Remove-Item Release.zip -Force -ErrorAction SilentlyContinue
 	7z a -tzip "$root\Release.zip" "$root\dist\*"
